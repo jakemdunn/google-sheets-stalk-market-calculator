@@ -31,88 +31,9 @@
 // We ensure the sheet has [calc] in the name to allow you to store other data in the spreadsheet
 function onEdit(edit: GoogleAppsScript.Events.SheetsOnEdit) {
   const sheetName = edit.range.getSheet().getName()
-  if (sheetName.includes('[calc]') && edit.range.getRow() > 1 && edit.range.getColumn() > 1 && edit.range.getColumn() < 16) {
-    if (edit.range.getColumn() % 2 === 0 && edit.range.getColumn() > 2) {
-      toggleChart(edit.range, edit.value)
-    } else {
-      updateSheet(edit.range)
-    }
+  if (sheetName.includes('[calc]') && edit.range.getRow() > 3 && edit.range.getColumn() > 1 && edit.range.getColumn() < 10) {
+    updateSheet(edit.range)
   }
-}
-
-// Chooses which data range to power the chart based on what box is checked
-function toggleChart(range: GoogleAppsScript.Spreadsheet.Range, value: string) {
-  const sheet = range.getSheet()
-  const charts = sheet.getCharts()
-  // If the box was unchecked, remove the chart and exit
-  if (value.toLowerCase() !== 'true') {
-    for (let chart of charts) {
-      sheet.removeChart(chart)
-    }
-    return
-  }
-  // Otherwise uncheck any other checkboxes
-  const selfRow = range.getRow() - 2
-  const selfCol = range.getColumn() - 4
-  const checkboxSearchRange = sheet.getRange(2, 4, 1000, 12)
-  const checkboxSearchValues = checkboxSearchRange.getValues()
-  for (let row = 0; row < checkboxSearchValues.length; row++) {
-    for (let col = 0; col < checkboxSearchValues[row].length; col += 2) {
-      if ((row !== selfRow || col !== selfCol) && checkboxSearchValues[row][col] === true) {
-        checkboxSearchRange.getCell(row + 1, col + 1).setValue(false)
-      }
-    }
-  }
-
-  // Create a chart if needed
-  let chart = charts.length ? charts[0] : sheet.newChart().setPosition(2, 17, 0, 0).setOption('width', 800).setOption('height', 600).build()
-
-  // Find the data
-  const dataCol = getDataColumn(range.getRow(), range.getColumn())
-  const title = sheet.getRange(1, dataCol).getValue()
-  const labelsRange = sheet.getRange(2, 29, 661)
-  const dataRange = sheet.getRange(2, dataCol, 661)
-  const integralRange = sheet.getRange(663, dataCol, 661)
-
-  // Update the chart
-  chart = chart
-    .modify()
-    .asComboChart()
-    .setTitle(title)
-    .setXAxisTitle('Turnip Price in Bells')
-    .setColors(['#b6d7a8', '#a4c2f4'])
-    .clearRanges()
-    .addRange(labelsRange)
-    .addRange(dataRange)
-    .addRange(integralRange)
-    .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
-    .setOption('useFirstColumnAsDomain', true)
-    .setOption('focusTarget', 'category')
-    .setOption('titleTextStyle', { alignment: 'center' })
-    .setOption('legend.position', 'none')
-    .setOption('series', {
-      0: {
-        type: 'area',
-        lineWidth: 1,
-      },
-      1: {
-        type: 'line',
-        targetAxisIndex: 1,
-      },
-    })
-    .setOption('vAxes', {
-      0: {
-        title: 'Individual Probability Percentage',
-      },
-      1: {
-        title: 'Cumulative Probability Percentage',
-        maxValue: 1,
-      },
-    })
-    .build()
-
-  // Update the sheet with the new chart
-  charts.length ? sheet.updateChart(chart) : sheet.insertChart(chart)
 }
 
 // Does the data extraction and formatting of results
@@ -125,12 +46,12 @@ function updateSheet(range: GoogleAppsScript.Spreadsheet.Range) {
   const editRow = range.getRow() - (range.getRow() % 2) // Round down to nearest multiple of 2
 
   // Get manually entered buy/sell prices
-  const sellRange = sheet.getRange(editRow, 4, 2, 13)
+  const sellRange = sheet.getRange(editRow, 4, 2, 10)
   let buyPrice: number | null = Number(sheet.getRange(editRow, 2).getValue())
   buyPrice = buyPrice < 90 || buyPrice > 110 ? null : buyPrice // Sanitize buyPrice
   const sellPrices = [buyPrice || 90, buyPrice || 110]
   const sellValues = sellRange.getValues()
-  for (let col = 1; col < 12; col += 2) {
+  for (let col = 0; col < 6; col ++) {
     for (let row = 0; row < 2; row++) {
       sellPrices.push(Number(sellValues[row][col] || 'NaN') || NaN)
     }
@@ -162,24 +83,17 @@ function updateSheet(range: GoogleAppsScript.Spreadsheet.Range) {
   // We store this in an array and set it all at once for performance
   const islandName = sheet.getRange(editRow, 1).getValue()
   const days = sheet
-    .getRange(1, 4, 1, 12)
+    .getRange(3, 4, 1, 6)
     .getValues()[0]
     .filter(v => v)
   const times = sheet
     .getRange(editRow, 3, 2, 1)
     .getValues()
     .map(v => v[0])
-  const displayValues: GoogleAppsScript.Spreadsheet.RichTextValue[][] = [Array(12).fill(null), Array(12).fill(null)]
+  const displayValues: GoogleAppsScript.Spreadsheet.RichTextValue[][] = [Array(6).fill(null), Array(6).fill(null)]
   const dataValues: string[][] = [] // array of columns, we convert to rows later
   const normalStyle = SpreadsheetApp.newTextStyle().setItalic(false).setForegroundColor('#000').build()
   const predictionStyle = SpreadsheetApp.newTextStyle().setItalic(true).setForegroundColor('#999').build()
-
-  // Copy the checkbox values
-  for (let row = 0; row < 2; row++) {
-    for (let col = 0; col < 12; col += 2) {
-      displayValues[row][col] = SpreadsheetApp.newRichTextValue().setText(sellValues[row][col]).build()
-    }
-  }
 
   // Set the display values for each cell, and construct the data column
   sellPrices.slice(2).forEach((v, idx) => {
@@ -208,40 +122,38 @@ function updateSheet(range: GoogleAppsScript.Spreadsheet.Range) {
       dataValues.push(fillEstimates(chartTitle, estimates))
     }
 
-    displayValues[idx % 2][1 + 2 * Math.floor(idx / 2)] = richText.build()
+    displayValues[idx % 2][Math.floor(idx / 2)] = richText.build()
   })
 
   // Add the trends to the display values
-  const trendText = SpreadsheetApp.newRichTextValue()
-  trendText.setText(
-    prediction.trends
-      .sort((a, b) => b.probability - a.probability)
-      .map(t => `${t.name}: ${(100 * t.probability).toFixed(2)}%`)
-      .join('\n'),
-  )
-  displayValues[0].push(trendText.build())
-  displayValues[1].push(trendText.build())
+  const trends = prediction.trends.reduce((object, trend) => {
+    return {
+      ...object,
+      [trend.name]: trend.probability
+    }
+  }, {} as Record<string, number>);
+  ['decreasing', 'random', 'small', 'big'].forEach((trend, index) => {
+    const trendText = SpreadsheetApp.newRichTextValue()
+    trendText.setText(
+      `${(100 * (trends[trend] || 0)).toFixed(2)}%`,
+    )
+    displayValues[0].push(trendText.build())
+    displayValues[1].push(trendText.build())
+  });
 
   // Fill the display data
   sellRange.setRichTextValues(displayValues)
-  // Set the titles for the chart data, in case it's not already there
-  sheet
-    .getRange(2, 29, 661)
-    .setValues(
-      Array(661)
-        .fill(undefined)
-        .map((_, i) => [i]),
-    )
-    .setNumberFormat('#,###')
+  
   // Fill the chart data
-  sheet
-    .getRange(1, getDataColumn(editRow, 0), 1323, 12)
-    .setValues(
-      Array(1323)
-        .fill(undefined)
-        .map((_, i) => dataValues.map(v => v[i])),
-    )
-    .setNumberFormat('#,##0.00%')
+  sheet.getRange(editRow * 0.5 + 2, 29, 1, 13)
+    .setValues([
+      [
+        islandName,
+        ...Array(12)
+          .fill(null)
+          .map((_, i) => sellPrices[i + 2] || null)
+      ]
+    ])
 }
 
 // row & col are absolute. col is clamped to valid values.
@@ -280,7 +192,7 @@ interface Estimate {
   probability: number // All probabilities in the same time period should add up to 1
 }
 interface Trend {
-  name: string
+  name: 'decreasing' | 'random' | 'small' | 'big',
   probability: number
 }
 
@@ -460,7 +372,7 @@ function generatePatternZeroWithLengths(
   }
   return {
     estimates: predicted_prices,
-    trends: [{ name: 'Random', probability }],
+    trends: [{ name: 'random', probability }],
   }
 }
 
@@ -503,7 +415,7 @@ function generatePatternOneWithPeak(given_prices: number[], peak_start: number, 
   }
   return {
     estimates: predicted_prices,
-    trends: [{ name: 'Big Spike', probability }],
+    trends: [{ name: 'big', probability }],
   }
 }
 
@@ -528,7 +440,7 @@ function generatePatternTwoWithRates(given_prices: number[], rates: Estimate[][]
 
   return {
     estimates: predicted_prices,
-    trends: [{ name: 'Decreasing', probability }],
+    trends: [{ name: 'decreasing', probability }],
   }
 }
 
@@ -607,7 +519,7 @@ function generatePatternThreeWithPeak(
 
   return {
     estimates: predicted_prices,
-    trends: [{ name: 'Small Spike', probability }],
+    trends: [{ name: 'small', probability }],
   }
 }
 
